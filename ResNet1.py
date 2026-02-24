@@ -112,15 +112,15 @@ def main():
     test_loader = DataLoader(test_dataset, batch_size=256, shuffle=False, num_workers=2)
 
     model = ResNet1(num_classes=10).to(device)
-    print("continuing from previous save")
-    model.load_state_dict(torch.load('models/resnet1_cifar10.pth'))
+    # print("continuing from previous save")
+    # model.load_state_dict(torch.load('models/resnet1_cifar10.pth'))
 
-    optimizer = optim.Adam(model.parameters(), eps=1e-10, lr=1e-4)
+    optimizer = optim.Adam(model.parameters(), lr=0.0001591895327318366)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
         optimizer,
         mode='min',
         factor=0.5,
-        patience=20,
+        patience=7,
         min_lr=1e-8,
     )
     criterion = nn.MSELoss()

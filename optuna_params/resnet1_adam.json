@@ -1,0 +1,8 @@
+{
+  "best_value": 54.88,
+  "best_params": {
+    "lr": 0.0001591895327318366,
+    "batch_size": 128,
+    "patience": 7
+  }
+}
