@@ -91,7 +91,6 @@ def train_with_teacher(model, device, train_loader, optimizer, criterion, epoch,
         loss.backward()
 
         
-
         total_loss += loss.item()
         
         optimizer.step()

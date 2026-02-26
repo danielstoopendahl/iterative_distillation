@@ -4,26 +4,31 @@ import torch.optim as optim
 from torchvision import datasets, transforms
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
+
 from ResNet18 import ResNet18
-from ResNet2 import ResNet2
-from ResNet6 import ResNet6
 
-# 43% ResNet-2 as teacher
-# 59% ResNet-6 as teacher
-# 62% ResNet-18 as teacher
+# 44.7% Accuracy vanilla
+# 44.2% Accuracy distilled from ResNet18, can maybe do better, seems very stuck after a couple of epochs
+# maybe optuna this
 
-class ResNetCIFAR(nn.Module):
+class DNN(nn.Module):
     def __init__(self, num_classes=10):
-        super(ResNetCIFAR, self).__init__()
+        super(DNN, self).__init__()
 
         input_dim = 3 * 32 * 32
-        hidden_dim = 16384
+        hidden_dim1 = 2048
+        hidden_dim2 = 512
+        hidden_dim3 = 64
 
         self.net = nn.Sequential(
             nn.Flatten(),                   
-            nn.Linear(input_dim, hidden_dim),
+            nn.Linear(input_dim, hidden_dim1),
             nn.ReLU(),
-            nn.Linear(hidden_dim, num_classes), 
+            nn.Linear(hidden_dim1, hidden_dim2),
+            nn.ReLU(),
+            nn.Linear(hidden_dim2, hidden_dim3),
+            nn.ReLU(),
+            nn.Linear(hidden_dim3, num_classes), 
         )
         self.softmax = nn.Softmax(dim=1)
 
@@ -35,20 +40,15 @@ class ResNetCIFAR(nn.Module):
         return self.softmax(logits)
 
 
-def ResNet1(num_classes=10):
-    return ResNetCIFAR(num_classes=num_classes)
-
-
 def train(model, device, train_loader, optimizer, epoch):
     model.train()
     running_loss = 0.0
-
 
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
         optimizer.zero_grad()
         logits = model.forward_logits(data)
-        loss = F.cross_entropy(logits, target)
+        loss = nn.CrossEntropyLoss(logits, target)
         loss.backward()
         optimizer.step()
 
@@ -110,7 +110,6 @@ def test(model, device, test_loader):
     )
     return test_loss, accuracy
 
-
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -134,36 +133,30 @@ def main():
     train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True, num_workers=12)
     test_loader = DataLoader(test_dataset, batch_size=256, shuffle=False, num_workers=12)
 
-    model = ResNet1(num_classes=10).to(device)
-    # print("continuing from previous save")
-    # model.load_state_dict(torch.load('models/resnet1_cifar10.pth'))
+    model = DNN(num_classes=10).to(device)
 
     optimizer = optim.Adam(model.parameters(), lr=1e-4)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
         optimizer,
         mode='min',
         factor=0.5,
-        patience=20,
+        patience=10,
         min_lr=1e-8,
     )
     criterion = nn.MSELoss()
 
     print('loading teacher...')
     teacher = ResNet18().to(device)
-    teacher.load_state_dict(torch.load('models/resnet18_cifar10.pth'))
+    teacher.load_state_dict(torch.load('models/resnet18_cifar10.pth', map_location=device)) 
 
-    for epoch in range(1, 151):
-        train_loss = train_with_teacher(model, device, train_loader, optimizer, criterion, epoch, teacher)
-        # train_loss = train(model, device, train_loader, optimizer, epoch)
-
+    for epoch in range(1, 201):
+        train_loss = train_with_teacher(model, device, train_loader, optimizer,criterion, epoch, teacher)
         print(f"Epoch {epoch}: Train loss {train_loss:.6f}")
-        val_loss, accuracy = test(model, device, test_loader)
-        scheduler.step(val_loss)
-        current_lr = optimizer.param_groups[0]['lr']
-        print(f"Epoch {epoch}: Learning rate {current_lr:.2e}")
+        val_loss, _ = test(model, device, test_loader)
+        # scheduler.step(val_loss)
 
-    torch.save(model.state_dict(), "models/resnet1_cifar10.pth")
-    print("Model saved to models/resnet1_cifar10.pth")
+    # torch.save(model.state_dict(), "models/DNN_cifar10.pth")
+    # print("Model saved to models/DNN_cifar10.pth")
 
 
 if __name__ == "__main__":

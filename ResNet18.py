@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import os
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
 
@@ -141,45 +142,66 @@ def test(model, device, test_loader, criterion):
     return test_loss, accuracy
 
 
-def main():
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+def get_dataloaders(data_dir="./data/tiny-imagenet-200", train_batch_size=128, test_batch_size=256, num_workers=4):
     train_transform = transforms.Compose(
         [
-            transforms.RandomCrop(32, padding=4),
+            transforms.RandomCrop(64, padding=4),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
-            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+            transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
         ]
     )
     test_transform = transforms.Compose(
         [
             transforms.ToTensor(),
-            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+            transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
         ]
     )
 
-    train_dataset = datasets.CIFAR10("./data", train=True, download=True, transform=train_transform)
-    test_dataset = datasets.CIFAR10("./data", train=False, download=True, transform=test_transform)
-    train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True, num_workers=2)
-    test_loader = DataLoader(test_dataset, batch_size=256, shuffle=False, num_workers=2)
+    train_dir = os.path.join(data_dir, "train")
+    val_dir = os.path.join(data_dir, "val")
 
-    model = ResNet18(num_classes=10).to(device)
-    print("continuing from previous save")
-    model.load_state_dict(torch.load('models/resnet18_cifar10.pth'))
+    train_dataset = datasets.ImageFolder(train_dir, transform=train_transform)
+    test_dataset = datasets.ImageFolder(val_dir, transform=test_transform)
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=train_batch_size,
+        shuffle=True,
+        num_workers=num_workers,
+        pin_memory=torch.cuda.is_available(),
+    )
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=test_batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=torch.cuda.is_available(),
+    )
+    return train_loader, test_loader
+
+
+def main():
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    train_loader, test_loader = get_dataloaders()
+
+    model = ResNet18(num_classes=200).to(device)
+    checkpoint_path = "models/resnet18_tiny_imagenet.pth"
+
+    # print("continuing from previous save")
+    # model.load_state_dict(torch.load(checkpoint_path, map_location=device))
 
     optimizer = optim.Adam(model.parameters(), eps=1e-10)
     criterion = nn.CrossEntropyLoss()
     # scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[100, 150], gamma=0.1)
 
-    for epoch in range(1, 31):
+    for epoch in range(1, 81):
         train_loss = train(model, device, train_loader, optimizer, criterion, epoch)
         print(f"Epoch {epoch}: Train loss {train_loss:.6f}")
         test(model, device, test_loader, criterion)
         # scheduler.step()
 
-    torch.save(model.state_dict(), "models/resnet18_cifar10.pth")
-    print("Model saved to models/resnet18_cifar10.pth")
+    torch.save(model.state_dict(), checkpoint_path)
+    print(f"Model saved to {checkpoint_path}")
 
 
 if __name__ == "__main__":
